@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Pre-download & cache the Hugging Face model files during build to ensure instant Space startup
 RUN python -c "\
 from transformers import AutoModel, AutoProcessor;\
-AutoModel.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True);\
+AutoModel.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True, low_cpu_mem_usage=False);\
 AutoProcessor.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True)\
 "
 

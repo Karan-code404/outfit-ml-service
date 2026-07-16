@@ -33,7 +33,7 @@ def startup_event():
     print("Loading Marqo/marqo-fashionSigLIP model and processor...")
     
     # Load model & processor from Hugging Face
-    model = AutoModel.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True)
+    model = AutoModel.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True, low_cpu_mem_usage=False)
     processor = AutoProcessor.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True)
     model.eval()
     
