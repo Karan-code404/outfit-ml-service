@@ -21,5 +21,5 @@ AutoProcessor.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=Tru
 # Copy project files
 COPY --chown=user:user . .
 
-# Hugging Face Spaces expects service on port 7860
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Hugging Face Spaces/Render expect service on dynamic ports (default 7860/10000)
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-7860}"]
