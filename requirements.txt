@@ -6,3 +6,5 @@ pillow
 scikit-learn
 python-multipart
 numpy
+ftfy
+open-clip-torch
