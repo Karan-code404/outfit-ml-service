@@ -11,11 +11,10 @@ WORKDIR /app
 COPY --chown=user:user requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download & cache the Hugging Face model files during build to ensure instant Space startup
+# Pre-download & cache the Hugging Face model files during build using OpenCLIP (prevents runtime download and meta tensor bugs)
 RUN python -c "\
-from transformers import AutoModel, AutoProcessor;\
-AutoModel.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True, low_cpu_mem_usage=False);\
-AutoProcessor.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True)\
+import open_clip;\
+open_clip.create_model_and_transforms('hf-hub:Marqo/marqo-fashionSigLIP')\
 "
 
 # Copy project files

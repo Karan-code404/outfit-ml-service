@@ -4,17 +4,17 @@ import numpy as np
 import torch
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
-from transformers import AutoModel, AutoProcessor
+import open_clip
 
 app = FastAPI(
     title="StyLoop Outfit Recommendation ML Microservice",
-    description="Standalone FastAPI microservice running Marqo/marqo-fashionSigLIP to generate outfit recommendations",
+    description="Standalone FastAPI microservice running Marqo/marqo-fashionSigLIP using OpenCLIP to generate outfit recommendations",
     version="1.0"
 )
 
-# Global variables for model, processor, and wardrobe
+# Global variables for model, preprocess transform, and wardrobe
 model = None
-processor = None
+preprocess = None
 wardrobe_embeddings = []
 wardrobe_metadata = []
 
@@ -29,19 +29,19 @@ DUMMY_WARDROBE = [
 
 @app.on_event("startup")
 def startup_event():
-    global model, processor, wardrobe_embeddings, wardrobe_metadata
-    print("Loading Marqo/marqo-fashionSigLIP model and processor...")
+    global model, preprocess, wardrobe_embeddings, wardrobe_metadata
+    print("Loading Marqo/marqo-fashionSigLIP model using OpenCLIP...")
     
-    # Load model & processor from Hugging Face
-    model = AutoModel.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True, low_cpu_mem_usage=False)
-    processor = AutoProcessor.from_pretrained('Marqo/marqo-fashionSigLIP', trust_remote_code=True)
+    # Load model and preprocess transform using OpenCLIP directly (bypasses HF AutoModel meta tensor bug)
+    model, _, preprocess = open_clip.create_model_and_transforms('hf-hub:Marqo/marqo-fashionSigLIP')
     model.eval()
     
     # Run a dummy forward pass to get the embedding dimension
     dummy_img = Image.new("RGB", (224, 224), color="white")
-    inputs = processor(images=dummy_img, return_tensors="pt")
+    processed_dummy = preprocess(dummy_img).unsqueeze(0)
     with torch.no_grad():
-        dummy_embedding = model.get_image_features(inputs['pixel_values'], normalize=True)
+        dummy_embedding = model.encode_image(processed_dummy)
+        dummy_embedding /= dummy_embedding.norm(dim=-1, keepdim=True)
     embedding_dim = dummy_embedding.shape[-1]
     print(f"Model loaded successfully. Embedding dimension: {embedding_dim}")
     
@@ -52,12 +52,11 @@ def startup_event():
         if os.path.exists(path):
             try:
                 img = Image.open(path).convert("RGB")
-                inputs = processor(images=img, return_tensors="pt")
+                processed_img = preprocess(img).unsqueeze(0)
                 with torch.no_grad():
-                    emb = model.get_image_features(inputs['pixel_values'], normalize=True)
+                    emb = model.encode_image(processed_img)
+                    emb /= emb.norm(dim=-1, keepdim=True)
                 emb_np = emb.cpu().numpy()[0]
-                # L2 normalize
-                emb_np = emb_np / np.linalg.norm(emb_np)
                 encoded_embeddings.append(emb_np)
                 wardrobe_metadata.append(item)
                 print(f"Loaded and encoded: {path}")
@@ -79,15 +78,15 @@ def health_check():
     return {
         "status": "healthy",
         "service": "StyLoop Outfit Recommendation ML Microservice",
-        "model": "Marqo/marqo-fashionSigLIP",
+        "model": "Marqo/marqo-fashionSigLIP (OpenCLIP)",
         "cached_items": len(wardrobe_metadata)
     }
 
 @app.post("/recommend")
 async def recommend(image: UploadFile = File(...)):
-    global model, processor, wardrobe_embeddings, wardrobe_metadata
+    global model, preprocess, wardrobe_embeddings, wardrobe_metadata
     
-    if model is None or processor is None:
+    if model is None or preprocess is None:
         raise HTTPException(status_code=503, detail="Model is loading, please try again in a few seconds.")
         
     try:
@@ -96,11 +95,11 @@ async def recommend(image: UploadFile = File(...)):
         pil_image = Image.open(BytesIO(contents)).convert("RGB")
         
         # Process and extract features
-        inputs = processor(images=pil_image, return_tensors="pt")
+        processed_img = preprocess(pil_image).unsqueeze(0)
         with torch.no_grad():
-            emb = model.get_image_features(inputs['pixel_values'], normalize=True)
+            emb = model.encode_image(processed_img)
+            emb /= emb.norm(dim=-1, keepdim=True)
         query_emb = emb.cpu().numpy()[0]
-        query_emb = query_emb / np.linalg.norm(query_emb)
         
         # Calculate cosine similarities using dot product
         similarities = wardrobe_embeddings @ query_emb
